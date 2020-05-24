@@ -18,20 +18,26 @@ class SharedTupleList:
 
     # Constructor and convenience factory method
 
-    def __init__(self, fields, field_names=None, size=None, shm_names=None):
+    def __init__(self, fields, field_names=None, initializer=None, size=None, shm_names=None):
         """
         Create a ShareTupleList newly or as reference to an existing one.
         Optionally, each tuple field might be named passed field_names.
         Either pass the size to create the ShareTupleList in a new SharedMemory,
-        or pass the list of names of existing SharedMemory using the same order
-        as the elements of the fields parameter.
+        or pass a lambda function as initializer, which has an index for tuple fields as parameter and
+        defines a generator with the initial values for each tuple, i.e. tuple fields.
+        Obviously, the generator must create the same amount of elements for each tuple field, e.g.
+        initializer=(lambda idx:[(x, x+1)[idx] for x in range(100)]) for 100 two-member tuples.
+        Alternatively pass the list of names of existing SharedMemory using the same order
+        as the elements of the fields parameter, i.e. these SharedMemory is now shared.
         :param fields: initializer tuple
         :param field_names: optionally to get, set fields of tuple by name
+        :param initializer: a lambda function with index (field index) as argument and a generator as function body
         :param size: number of tuples in the list (storage capacity), used to create a list
         :param shm_names: pass the names of the existing list (SharedMemory)
         """
         assert (type(fields) == tuple), "passed fields must be a tuple"
-        assert (size is not None or shm_names is not None), "either pass size or shm_names"
+        assert (size is not None or shm_names is not None or initializer is not None), \
+            "pass size, initializer or shm_names"
 
         self._create_shm = shm_names is None
         self._size = size
@@ -42,11 +48,15 @@ class SharedTupleList:
         self._fields_smm_name = []
         self._fields_list = []
         self._fields_name = field_names
-        self._fields_names_map = {n: i for (i, n) in enumerate(field_names)}
+        if field_names is not None:
+            self._fields_names_map = {n: i for (i, n) in enumerate(field_names)}
 
         for i, f in enumerate(fields):
             if self._create_shm:
-                shl = ShareableList([f for _ in range(size)])
+                if initializer is None:
+                    shl = ShareableList([f for _ in range(size)])
+                else:
+                    shl = ShareableList(initializer(i))
             else:
                 shl = ShareableList(name=shm_names[i])
                 if self._size is None:
@@ -99,7 +109,10 @@ class SharedTupleList:
 
     def get_field_names(self):
         """get_field_names returns all names of tuple's fields in order of the tuple fields"""
-        return self._fields_name.copy()
+        if self._fields_name is None:
+            return None
+        else:
+            return self._fields_name.copy()
 
     def get_field_type(self, item):
         """get_field_type returns the type of the tuple's field at the given index or name"""
