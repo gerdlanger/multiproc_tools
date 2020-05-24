@@ -16,6 +16,8 @@ class SharedTupleList:
     Optionally, each tuple field might be named passed field_names.
     """
 
+    # Constructor and convenience factory method
+
     def __init__(self, fields, field_names=None, size=None, shm_names=None):
         """
         Create a ShareTupleList newly or as reference to an existing one.
@@ -62,24 +64,30 @@ class SharedTupleList:
         """
         return SharedTupleList(stl.get_prototype(), stl.get_field_names(), shm_names=stl.get_shm_names())
 
-    def __item2idx(self, item):
-        """__item2idx return the item itself, if it is an int value or the index of the passed field_name"""
+    # internal methods for field name to index handling
+
+    def _item2idx(self, item):
+        """_item2idx return the item itself, if it is an int value or the index of the passed field_name"""
         if type(item) == int:
             return item
         else:
             return self._fields_names_map.get(item)
 
-    def __get_list(self, item):
-        """__get_list returns the ShareableList of the given index or field_name"""
-        return self._fields_list[self.__item2idx(item)]
+    def _get_list(self, item):
+        """_get_list returns the ShareableList of the given index or field_name"""
+        return self._fields_list[self._item2idx(item)]
+
+    # shared memory name retrieval
 
     def get_shm_name(self, item):
         """get_shm_name returns the name of the underlying shared memory for the index or field_name"""
-        return self._fields_smm_name[self.__item2idx(item)]
+        return self._fields_smm_name[self._item2idx(item)]
 
     def get_shm_names(self):
         """get_shm_names returns all names of the underlying shared memories in order of the tuple fields"""
         return self._fields_smm_name.copy()
+
+    # meta info retrieval
 
     def get_prototype(self):
         """get_prototype returns the original tuple used to define and initiate the SharedTupleList"""
@@ -87,7 +95,7 @@ class SharedTupleList:
 
     def get_field_name(self, item):
         """get_field_name returns the name of the tuple's field at the given index (or name ... itself :-))"""
-        return self._fields_name[self.__item2idx(item)]
+        return self._fields_name[self._item2idx(item)]
 
     def get_field_names(self):
         """get_field_names returns all names of tuple's fields in order of the tuple fields"""
@@ -95,7 +103,7 @@ class SharedTupleList:
 
     def get_field_type(self, item):
         """get_field_type returns the type of the tuple's field at the given index or name"""
-        return self._fields_type[self.__item2idx(item)]
+        return self._fields_type[self._item2idx(item)]
 
     def get_field_types(self):
         """get_field_type returns all types of the tuple's fields in order of the tuple fields"""
@@ -113,8 +121,11 @@ class SharedTupleList:
         """__len__ is the storage capacity in number of tuples in this SharedTupleList"""
         return self._size
 
+    # index-based getting and setting of whole tuples
+
     def __getitem__(self, idx):
-        """__getitem__ allows to get the tuple at the given index."""
+        """__getitem__ allows to get the tuple at the given index.
+        Note: as the result is a tuple, the returned tuple cannot be used to change values in the list."""
         # reconstruct the tuple from the different internal ShareableLists
         return tuple(self._fields_list[i][idx] for i in range(self._tuple_len))
 
@@ -124,6 +135,8 @@ class SharedTupleList:
         for i in range(self._tuple_len):
             self._fields_list[i][idx] = value[i]
 
+    # index-based getting and setting of tuple fields
+
     def get(self, idx, item):
         """
         get returns the value of the passed field (index or name) of the tuple at the given idx
@@ -131,7 +144,7 @@ class SharedTupleList:
         :param item: the field index inside the tuple or field name
         :return: the field of the addressed tuple by index or field name
         """
-        return self.__get_list(item)[idx]
+        return self._get_list(item)[idx]
 
     def set(self, idx, item, value) -> None:
         """
@@ -140,19 +153,21 @@ class SharedTupleList:
         :param item: the field index inside the tuple or field name
         :param value: the value
         """
-        self.__get_list(item)[idx] = value
+        self._get_list(item)[idx] = value
+
+    # shared memory clean ups#
 
     def close(self):
         """close the attached shared memory of all referenced ShareableLists"""
         for i in range(self._tuple_len):
-            self.__get_list(i).shm.close()
+            self._get_list(i).shm.close()
 
     def unlink(self):
         """unlink of attached shared memory of all referenced ShareableLists,
         if shared memory was created by this instance"""
         if self._create_shm:
             for i in range(self._tuple_len):
-                self.__get_list(i).shm.unlink()
+                self._get_list(i).shm.unlink()
 
 
 if __name__ == '__main__':
